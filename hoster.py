@@ -39,9 +39,9 @@ def main():
 
     #listen for events to keep the hosts file updated
     for e in events:
-        if e["Type"]!="container": 
+        if e["Type"]!="container":
             continue
-        
+
         status = e["status"]
         if status =="start":
             container_id = e["id"]
@@ -64,22 +64,32 @@ def get_container_data(dockerClient, container_id):
     container_ip = info["NetworkSettings"]["IPAddress"]
     if info["Config"]["Domainname"]:
         container_hostname = container_hostname + "." + info["Config"]["Domainname"]
-    
+
+    names = [container_name, container_hostname]
+
+    # include docker-compose labels if present
+    labels = info["Config"].get("Labels")
+    if labels and "com.docker.compose.project" in labels:
+        compose_name = "{}.{}".format(
+            labels["com.docker.compose.service"],
+            labels["com.docker.compose.project"])
+        names.append(compose_name)
+
     result = []
 
     for values in info["NetworkSettings"]["Networks"].values():
-        
-        if not values["Aliases"]: 
+
+        if not values["Aliases"]:
             continue
 
         result.append({
-                "ip": values["IPAddress"] , 
+                "ip": values["IPAddress"] ,
                 "name": container_name,
-                "domains": set(values["Aliases"] + [container_name, container_hostname])
+                "domains": set(values["Aliases"] + names)
             })
 
     if container_ip:
-        result.append({"ip": container_ip, "name": container_name, "domains": [container_name, container_hostname ]})
+        result.append({"ip": container_ip, "name": container_name, "domains": names})
 
     return result
 
@@ -111,11 +121,11 @@ def update_hosts_file():
     #append all the domain lines
     if len(hosts)>0:
         lines.append("\n\n"+enclosing_pattern)
-        
+
         for id, addresses in hosts.items():
             for addr in addresses:
                 lines.append("%s    %s\n"%(addr["ip"],"   ".join(addr["domains"])))
-        
+
         lines.append("#-----Do-not-add-hosts-after-this-line-----\n\n")
 
     #write it on the auxiliar file
